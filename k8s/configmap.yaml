@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-config
+  namespace: credit-mvp
+data:
+  NODE_ENV: "production"
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "credit"
+  DB_USER: "credituser"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  JWT_ISSUER: "https://api.credit.local"
+  RULES_PATH: "/app/rules"

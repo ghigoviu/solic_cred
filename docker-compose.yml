@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: credit_postgres
+    networks:
+      - credit-net
+    environment:
+      POSTGRES_USER: credituser
+      POSTGRES_PASSWORD: SuperSecret
+      POSTGRES_DB: credit
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U credituser -d credit"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: credit_redis
+    networks:
+      - credit-net
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: credit_backend
+    networks:
+      - credit-net
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_HOST=credit_postgres
+      - DB_PORT=5432
+      - DB_USER=credituser
+      - DB_PASS=SuperSecret
+      - DB_NAME=credit
+      - REDIS_HOST=credit_redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=my-secret-key-123
+      - RULES_PATH=/usr/src/app/src/rules
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: credit_frontend
+    networks:
+      - credit-net
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:3000
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  credit-net:
+    driver: bridge
