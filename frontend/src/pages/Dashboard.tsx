@@ -1,7 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { CreditRequest, StatusEvent } from '../types';
 import ApplicationForm from '../components/ApplicationForm';
+import ApplicationDetail from '../components/ApplicationDetail';
+
+interface ToastMsg {
+  id: string;
+  msg: string;
+  type: 'info' | 'success' | 'evaluating';
+}
 
 export default function Dashboard() {
   const [country, setCountry] = useState('MX');
@@ -9,6 +16,16 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [flashingRows, setFlashingRows] = useState<Set<string>>(new Set());
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastMsg[]>([]);
+
+  const addToast = useCallback((msg: string, type: ToastMsg['type']) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  }, []);
 
   useEffect(() => {
     // 1. Fetch initial data
@@ -37,6 +54,12 @@ export default function Dashboard() {
         r.id === ev.requestId ? { ...r, status: ev.new } : r
       ));
       
+      if (ev.new === 'VALIDATING' || ev.new === 'SCORING') {
+         addToast(`Evaluación iniciada para petición ${ev.requestId.substring(0,8)}...`, 'evaluating');
+      } else if (ev.new === 'APPROVED' || ev.new === 'REJECTED') {
+         addToast(`Evaluación finalizada: ${ev.new} para petición ${ev.requestId.substring(0,8)}...`, 'success');
+      }
+
       // Add row to flashing state
       setFlashingRows(prev => {
         const newSet = new Set(prev);
@@ -106,7 +129,12 @@ export default function Dashboard() {
                 <tr><td colSpan={6} style={{textAlign: 'center'}}>No hay solicitudes recientes.</td></tr>
               )}
               {requests.map(req => (
-                <tr key={req.id} className={flashingRows.has(req.id) ? 'flash-update' : ''}>
+                <tr 
+                  key={req.id} 
+                  className={flashingRows.has(req.id) ? 'flash-update' : ''}
+                  onClick={() => setSelectedRequestId(req.id)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>{req.id?.substring(0,8)}...</td>
                   <td style={{ fontWeight: 500 }}>{req.customerName}</td>
                   <td>${Number(req.amount).toLocaleString()}</td>
@@ -131,6 +159,21 @@ export default function Dashboard() {
           onSuccess={handleNewRequest} 
         />
       )}
+
+      {selectedRequestId && (
+        <ApplicationDetail 
+          requestId={selectedRequestId} 
+          onClose={() => setSelectedRequestId(null)} 
+        />
+      )}
+
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className="toast" style={{ borderLeft: `4px solid ${t.type === 'success' ? 'var(--success)' : 'var(--info)'}` }}>
+            {t.msg}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

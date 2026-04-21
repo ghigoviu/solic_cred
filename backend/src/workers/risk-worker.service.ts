@@ -11,7 +11,7 @@ export class RiskWorkerService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.logger.log('Starting Risk Worker...');
-    this.timer = setInterval(() => this.pollJobs(), 5000);
+    this.timer = setInterval(() => this.pollJobs(), 10000);
   }
 
   onModuleDestroy() {
@@ -63,20 +63,84 @@ export class RiskWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processJob(job: any, client: any) {
-    this.logger.log(`Processing risk job for request ${job.payload.id}`);
+    const request = job.payload;
+    this.logger.log(`Processing risk job for request ${request.id} (Country: ${request.country})`);
     
-    // Simulate Risk evaluation
+    // Simulate thinking time
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    const request = job.payload;
-    // Mock logic: If amount > 50000, reject. Otherwise approve.
-    const isApproved = request.amount <= 50000;
+    // Fetch customer details
+    const customerRes = await client.query(
+      `SELECT monthly_income, encode(encrypted_doc, 'escape') as doc, doc_type FROM customer WHERE id = $1`, 
+      [request.customer_id]
+    );
+
+    if (!customerRes.rows.length) throw new Error("Customer not found");
+    const customer = customerRes.rows[0];
+    const doc = customer.doc.toString();
+    const monthlyIncome = Number(customer.monthly_income);
+    const amount = Number(request.amount);
+
+    let isApproved = true;
+    let reason = "ALL_RULES_PASSED";
+
+    // EVALUACIÓN DE REGLAS POR PAÍS
+    if (request.country === 'MX') {
+      if (!doc || doc.trim() === '') {
+        isApproved = false;
+        reason = "CURP_MISSING";
+      } else if (!/^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[0-9]{2}$/i.test(doc)) {
+         isApproved = false;
+         reason = "CURP_INVALID_FORMAT";
+      } else if (amount > monthlyIncome * 12) {
+         isApproved = false;
+         reason = "AMOUNT_EXCEEDS_12_MONTHS";
+      }
+    } 
+    else if (request.country === 'CO') {
+      if (!doc || doc.trim() === '') {
+        isApproved = false;
+        reason = "CC_MISSING";
+      } else {
+        // Mock bank info for Colombia (Random Total Debt between 0 and 2x income)
+        const totalDebt = Math.random() * (monthlyIncome * 2);
+        if (totalDebt >= monthlyIncome * 0.7) {
+          isApproved = false;
+          reason = "DEBT_TOO_HIGH";
+        }
+      }
+    }
+    else if (request.country === 'BR') {
+      if (!doc || doc.trim() === '') {
+        isApproved = false;
+        reason = "CPF_MISSING";
+      } else if (doc.length !== 11) { // Mock custom "validCpfBr" check (length = 11)
+        isApproved = false;
+        reason = "CPF_INVALID";
+      } else {
+        // Mock score between 300 and 850
+        const score = Math.floor(Math.random() * 550) + 300;
+        if (score < 600) {
+          isApproved = false;
+          reason = "SCORE_TOO_LOW";
+        }
+      }
+    }
+
     const finalStatus = isApproved ? 'APPROVED' : 'REJECTED';
+    const bankInfo = { reason, evaluatedAt: new Date().toISOString() };
 
     await client.query(
-      `UPDATE credit_request SET status = $1, updated_at = now() WHERE id = $2`,
-      [finalStatus, request.id]
+      `UPDATE credit_request SET status = $1, bank_info = $2, updated_at = now() WHERE id = $3`,
+      [finalStatus, JSON.stringify(bankInfo), request.id]
     );
-    this.logger.log(`Request ${request.id} scored -> ${finalStatus}`);
+
+    // Update timeline comment explicitly
+    await client.query(
+      `UPDATE status_timeline SET comment = $1 WHERE request_id = $2 AND to_status = $3`,
+      [reason, request.id, finalStatus]
+    );
+
+    this.logger.log(`Request ${request.id} scored -> ${finalStatus} (Reason: ${reason})`);
   }
 }
