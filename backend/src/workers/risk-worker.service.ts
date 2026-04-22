@@ -92,9 +92,9 @@ export class RiskWorkerService implements OnModuleInit, OnModuleDestroy {
       } else if (!/^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[0-9]{2}$/i.test(doc)) {
          isApproved = false;
          reason = "CURP_INVALID_FORMAT";
-      } else if (amount > monthlyIncome * 12) {
+      } else if (amount > monthlyIncome * 6) {
          isApproved = false;
-         reason = "AMOUNT_EXCEEDS_12_MONTHS";
+         reason = "AMOUNT_EXCEEDS_6_MONTHS";
       }
     } 
     else if (request.country === 'CO') {
@@ -102,11 +102,10 @@ export class RiskWorkerService implements OnModuleInit, OnModuleDestroy {
         isApproved = false;
         reason = "CC_MISSING";
       } else {
-        // Mock bank info for Colombia (Random Total Debt between 0 and 2x income)
-        const totalDebt = Math.random() * (monthlyIncome * 2);
-        if (totalDebt >= monthlyIncome * 0.7) {
+        const totalDebt = Math.random() * (monthlyIncome);
+        if (totalDebt >= monthlyIncome * 0.75) {
           isApproved = false;
-          reason = "DEBT_TOO_HIGH";
+          reason = "DEBT_TOO_HIGH: " + `(Total Debt: ${totalDebt.toFixed(2)})`;
         }
       }
     }
@@ -114,11 +113,10 @@ export class RiskWorkerService implements OnModuleInit, OnModuleDestroy {
       if (!doc || doc.trim() === '') {
         isApproved = false;
         reason = "CPF_MISSING";
-      } else if (doc.length !== 11) { // Mock custom "validCpfBr" check (length = 11)
+      } else if (doc.length !== 11) { 
         isApproved = false;
         reason = "CPF_INVALID";
       } else {
-        // Mock score between 300 and 850
         const score = Math.floor(Math.random() * 550) + 300;
         if (score < 600) {
           isApproved = false;

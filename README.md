@@ -9,15 +9,14 @@ Sistema backend + frontend para gestionar solicitudes de crédito en múltiples 
 1. [Requisitos previos](#1-requisitos-previos)
 2. [Inicio rápido — levantar en local](#2-inicio-rápido--levantar-en-local)
 3. [Variables de entorno](#3-variables-de-entorno)
-4. [Comandos disponibles (Makefile)](#4-comandos-disponibles-makefile)
-5. [Supuestos](#5-supuestos)
-6. [Modelo de datos](#6-modelo-de-datos)
-7. [Decisiones técnicas](#7-decisiones-técnicas)
-8. [Consideraciones de seguridad](#8-consideraciones-de-seguridad)
-9. [Escalabilidad y grandes volúmenes](#9-escalabilidad-y-grandes-volúmenes)
-10. [Concurrencia, colas y webhooks](#10-concurrencia-colas-y-webhooks)
-11. [Caching — qué, por qué y cómo se invalida](#11-caching--qué-por-qué-y-cómo-se-invalida)
-12. [Países implementados](#12-países-implementados)
+4. [Supuestos](#4-supuestos)
+5. [Modelo de datos](#5-modelo-de-datos)
+6. [Decisiones técnicas](#6-decisiones-técnicas)
+7. [Consideraciones de seguridad](#7-consideraciones-de-seguridad)
+8. [Escalabilidad y grandes volúmenes](#8-escalabilidad-y-grandes-volúmenes)
+9. [Concurrencia, colas y webhooks](#9-concurrencia-colas-y-webhooks)
+10. [Caching — qué, por qué y cómo se invalida](#10-caching--qué-por-qué-y-cómo-se-invalida)
+11. [Países implementados](#11-países-implementados)
 
 ---
 
@@ -27,8 +26,6 @@ Sistema backend + frontend para gestionar solicitudes de crédito en múltiples 
 |---|---|
 | Docker | 24+ |
 | Docker Compose | v2.20+ |
-| Node.js | 20 LTS |
-| Make | cualquiera |
 
 No se requiere instalar PostgreSQL, Redis ni ningún otro servicio de forma local; todo corre dentro de Docker.
 
@@ -38,29 +35,20 @@ No se requiere instalar PostgreSQL, Redis ni ningún otro servicio de forma loca
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/org/credit-mvp.git
-cd credit-mvp
+git clone https://github.com/org/solic_cred.git
+cd solic_cred/
 
-# 2. Copiar variables de entorno
-cp .env.example .env
+# 2. Instar dependencias de Node para backend y frontend
+cd backend/
+npm install
+cd ../frontend/
+npm install
+cd ..
 
 # 3. Levantar todos los servicios
-make run
+docker-compose up --build
 
-# 4. (En otra terminal) Verificar que todo esté sano
-make health
 ```
-
-El comando `make run` ejecuta `docker compose up --build -d` e incluye:
-
-- `core-requests` — API principal en NestJS (puerto 3000)
-- `bank-connector-mx` / `-co` / `-br` — Adaptadores bancarios simulados (puerto 8080 cada uno)
-- `risk-worker` — Worker de evaluación de riesgo en Node.js + WASM
-- `audit-worker` — Worker de auditoría en Node.js
-- `webhook-dispatcher` — Despachador de webhooks salientes
-- `postgres` — PostgreSQL 15 (puerto 5432)
-- `redis` — Redis 7 para Streams y caché (puerto 6379)
-- `frontend` — React 18 + Vite (puerto 5173)
 
 Una vez levantado, el sistema completo está disponible en:
 
@@ -106,32 +94,7 @@ NODE_ENV=development
 
 ---
 
-## 4. Comandos disponibles (Makefile)
-
-```bash
-make run        # Levanta todos los servicios con docker compose up --build -d
-make stop       # Detiene todos los servicios
-make restart    # stop + run
-make logs       # Muestra logs en tiempo real de todos los servicios
-make health     # Llama GET /health en core-requests y verifica que responda 200
-
-make migrate    # Ejecuta las migraciones de base de datos (TypeORM)
-make seed       # Carga datos de prueba en la base de datos
-
-make test       # Corre la suite de tests (jest --runInBand)
-make test:watch # Tests en modo watch
-make test:cov   # Tests con reporte de cobertura
-
-make lint       # ESLint sobre todo el monorepo
-make build      # Compila TypeScript de todos los servicios
-
-make deploy     # Aplica los manifiestos de Kubernetes (requiere kubectl configurado)
-make k8s:rules  # Crea el ConfigMap de reglas YAML en el cluster
-```
-
----
-
-## 5. Supuestos
+## 4. Supuestos
 
 Los siguientes supuestos fueron tomados para acotar el alcance del MVP dentro del plazo de 1–3 días, sin sacrificar la arquitectura objetivo.
 
@@ -169,7 +132,7 @@ El MVP cubre **México (MX), Colombia (CO) y Brasil (BR)**. La arquitectura perm
 
 ---
 
-## 6. Modelo de datos
+## 5. Modelo de datos
 
 ### Diagrama de entidades
 
@@ -298,7 +261,7 @@ CREATE INDEX idx_audit_entity
 
 ---
 
-## 7. Decisiones técnicas
+## 6. Decisiones técnicas
 
 ### Por qué NestJS sobre Express puro
 
@@ -326,7 +289,7 @@ Agregar un país nuevo (por ejemplo, España) requiere exactamente tres artefact
 
 ---
 
-## 8. Consideraciones de seguridad
+## 7. Consideraciones de seguridad
 
 ### PII (información personal identificable)
 
@@ -352,7 +315,7 @@ El archivo `.env` está en `.gitignore`. El `secret.yaml` de K8s en este repo co
 
 ---
 
-## 9. Escalabilidad y grandes volúmenes
+## 8. Escalabilidad y grandes volúmenes
 
 El sistema está diseñado para escalar desde el MVP hasta decenas de millones de solicitudes al mes sin rediseño estructural.
 
@@ -378,7 +341,7 @@ Los workers (risk, audit, webhook) son stateless y se escalan horizontalmente co
 
 ---
 
-## 10. Concurrencia, colas y webhooks
+## 9. Concurrencia, colas y webhooks
 
 ### Estrategia de concurrencia
 
@@ -407,7 +370,7 @@ Cuando una solicitud llega a `FUNDS_SENT`, el `webhook-dispatcher` envía una no
 
 ---
 
-## 11. Caching — qué, por qué y cómo se invalida
+## 10. Caching — qué, por qué y cómo se invalida
 
 ### Qué se cachea
 
@@ -429,12 +392,10 @@ Cuando una solicitud llega a `FUNDS_SENT`, el `webhook-dispatcher` envía una no
 
 ---
 
-## 12. Países implementados
+## 11. Países implementados
 
 | País | Código | Documento | Reglas de negocio |
 |---|---|---|---|
-| México | MX | CURP | Formato CURP, monto ≤ 12 meses de ingreso |
-| Colombia | CO | Cédula de Ciudadanía (CC) | Deuda total < 70% del ingreso mensual |
+| México | MX | CURP | Formato CURP, monto ≤ 6 meses de ingreso |
+| Colombia | CO | Cédula de Ciudadanía (CC) | Deuda total < 75% del ingreso mensual |
 | Brasil | BR | CPF | Validación de dígitos verificadores, score ≥ 600 |
-
-Para agregar un nuevo país, consulta `docs/adding-a-country.md`.
